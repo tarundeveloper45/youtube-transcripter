@@ -1,10 +1,25 @@
 # youtube-transcripter
 
-A small Python CLI that fetches the transcript/captions of any public
-YouTube video — no API key required. Given a URL you get the transcript as
-plain text, SRT subtitles, or timestamped JSON.
+Fetches the transcript/captions of any public YouTube video — no API key
+required. Given a URL you get the transcript as plain text, SRT subtitles,
+or timestamped JSON. Comes as a Python CLI ([transcripter.py](transcripter.py))
+and a web app ([webapp/](webapp)) with a URL box and a copy/download button.
 
-## Setup
+## Web app
+
+```bash
+cd webapp
+npm install
+npm start
+```
+
+Then open http://localhost:3000, paste a video URL, and click "Get
+transcript". Uses the [`youtube-transcript`](https://www.npmjs.com/package/youtube-transcript)
+npm package under the hood.
+
+## CLI
+
+### Setup
 
 ```bash
 pip install -r requirements.txt

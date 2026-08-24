@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YouTube Transcripter</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262b36;
+    --text: #e8eaed;
+    --muted: #9aa1ac;
+    --accent: #ff4d4f;
+    --accent-hover: #ff6b6d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 16px;
+  }
+  h1 {
+    font-size: 1.6rem;
+    margin: 0 0 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 0.95rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 720px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  input[type="text"] {
+    flex: 1 1 260px;
+    background: #0f1115;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  input[type="text"]:focus { outline: 1px solid var(--accent); }
+  select {
+    background: #0f1115;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #444; cursor: not-allowed; }
+  .options {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .options input[type="text"] { flex: 0 0 100px; padding: 8px 10px; }
+  .status { margin-top: 16px; font-size: 0.9rem; color: var(--muted); min-height: 1.2em; }
+  .status.error { color: var(--accent); }
+  .result {
+    margin-top: 16px;
+    display: none;
+  }
+  .result.visible { display: block; }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .result-header .meta { color: var(--muted); font-size: 0.85rem; }
+  .actions { display: flex; gap: 8px; }
+  .actions button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .actions button:hover { border-color: var(--accent); background: transparent; }
+  textarea {
+    width: 100%;
+    min-height: 340px;
+    background: #0b0d11;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  footer {
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>YouTube Transcripter</h1>
+  <p class="subtitle">Paste a YouTube link, get the transcript.</p>
+
+  <div class="card">
+    <div class="row">
+      <input id="video" type="text" placeholder="https://www.youtube.com/watch?v=... or video ID" />
+      <select id="format">
+        <option value="text">Text</option>
+        <option value="srt">SRT</option>
+        <option value="json">JSON</option>
+      </select>
+      <button id="fetchBtn">Get transcript</button>
+    </div>
+    <div class="options">
+      <label>Language code (optional): <input id="lang" type="text" placeholder="en" /></label>
+    </div>
+    <div id="status" class="status"></div>
+
+    <div id="result" class="result">
+      <div class="result-header">
+        <span id="meta" class="meta"></span>
+        <div class="actions">
+          <button id="copyBtn">Copy</button>
+          <button id="downloadBtn">Download</button>
+        </div>
+      </div>
+      <textarea id="output" readonly></textarea>
+    </div>
+  </div>
+
+  <footer>Uses YouTube's public caption tracks. Only works for videos with captions enabled.</footer>
+
+  <script>
+    const videoInput = document.getElementById("video");
+    const langInput = document.getElementById("lang");
+    const formatSelect = document.getElementById("format");
+    const fetchBtn = document.getElementById("fetchBtn");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const metaEl = document.getElementById("meta");
+    const outputEl = document.getElementById("output");
+    const copyBtn = document.getElementById("copyBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+
+    let lastContent = "";
+    let lastFilename = "transcript.txt";
+
+    async function fetchTranscript() {
+      const video = videoInput.value.trim();
+      const lang = langInput.value.trim();
+      const format = formatSelect.value;
+
+      if (!video) {
+        setStatus("Paste a YouTube URL or video ID first.", true);
+        return;
+      }
+
+      setStatus("Fetching transcript...");
+      resultEl.classList.remove("visible");
+      fetchBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/transcript", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video, lang: lang || undefined, format }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setStatus(data.error || "Something went wrong.", true);
+          return;
+        }
+
+        const content = format === "json" ? JSON.stringify(data.cues, null, 2) : data.content;
+        lastContent = content;
+        lastFilename = `${data.videoId}.${format === "text" ? "txt" : format}`;
+
+        outputEl.value = content;
+        metaEl.textContent = `Video: ${data.videoId}  ·  Language: ${data.lang}  ·  Format: ${format}`;
+        resultEl.classList.add("visible");
+        setStatus("");
+      } catch (err) {
+        setStatus("Network error: " + err.message, true);
+      } finally {
+        fetchBtn.disabled = false;
+      }
+    }
+
+    function setStatus(msg, isError = false) {
+      statusEl.textContent = msg;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    fetchBtn.addEventListener("click", fetchTranscript);
+    videoInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") fetchTranscript();
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(lastContent);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => (copyBtn.textContent = "Copy"), 1200);
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      const blob = new Blob([lastContent], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = lastFilename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  </script>
+</body>
+</html>
