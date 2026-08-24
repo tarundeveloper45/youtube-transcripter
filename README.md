@@ -17,6 +17,21 @@ Then open http://localhost:3000, paste a video URL, and click "Get
 transcript". Uses the [`youtube-transcript`](https://www.npmjs.com/package/youtube-transcript)
 npm package under the hood.
 
+### Deploy to Vercel
+
+The app is structured to deploy as-is: `webapp/api/transcript.js` runs as a
+Vercel serverless function, `webapp/public/` is served statically.
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import this GitHub repo.
+2. Set **Root Directory** to `webapp`.
+3. Deploy — no other config needed.
+
+Or from the CLI, run from inside `webapp/`:
+
+```bash
+npx vercel
+```
+
 ## CLI
 
 ### Setup
