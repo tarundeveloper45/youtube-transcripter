@@ -2,7 +2,7 @@ const {
   YoutubeTranscript,
   YoutubeTranscriptDisabledError,
 } = require("youtube-transcript");
-const { ProxyAgent } = require("undici");
+const { fetch: undiciFetch, ProxyAgent } = require("undici");
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -74,7 +74,7 @@ function localeAwareFetch(url, options = {}) {
     headers["User-Agent"] = BROWSER_USER_AGENT;
   }
 
-  return fetch(target.toString(), {
+  return undiciFetch(target.toString(), {
     ...options,
     headers,
     ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
