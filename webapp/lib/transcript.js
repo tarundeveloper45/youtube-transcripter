@@ -1,4 +1,10 @@
-const { YoutubeTranscript } = require("youtube-transcript");
+const {
+  YoutubeTranscript,
+  YoutubeTranscriptDisabledError,
+} = require("youtube-transcript");
+
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 function extractVideoId(input) {
   const trimmed = input.trim();
@@ -42,6 +48,40 @@ function toSrt(cues) {
     .join("\n");
 }
 
+// The npm package calls fetch three times per lookup: the InnerTube player
+// endpoint, the watch page (HTML scrape fallback), and the caption track
+// itself. We only need to adjust the watch-page request — adding an explicit
+// locale and fuller browser headers noticeably improves whether YouTube
+// includes captionTracks in the response on IPs it treats with suspicion
+// (cloud/datacenter ranges, which is exactly what a Vercel function runs on).
+function localeAwareFetch(url, options = {}) {
+  const target = new URL(url);
+  const headers = { ...(options.headers || {}) };
+
+  if (target.hostname === "www.youtube.com" && target.pathname === "/watch") {
+    if (!target.searchParams.has("hl")) target.searchParams.set("hl", "en");
+    if (!target.searchParams.has("gl")) target.searchParams.set("gl", "US");
+    headers["Accept-Language"] = "en-US,en;q=0.9";
+    headers["User-Agent"] = BROWSER_USER_AGENT;
+  }
+
+  return fetch(target.toString(), { ...options, headers });
+}
+
+async function fetchWithRetry(videoId, lang) {
+  const config = { fetch: localeAwareFetch, ...(lang ? { lang } : {}) };
+  try {
+    return await YoutubeTranscript.fetchTranscript(videoId, config);
+  } catch (e) {
+    // A single transient miss (YouTube occasionally omits captionTracks on
+    // the first hit from a given IP) is worth one retry before giving up.
+    if (e instanceof YoutubeTranscriptDisabledError) {
+      return await YoutubeTranscript.fetchTranscript(videoId, config);
+    }
+    throw e;
+  }
+}
+
 async function getTranscript({ video, lang, format }) {
   if (!video || typeof video !== "string") {
     const err = new Error("Missing 'video' (URL or ID).");
@@ -58,9 +98,17 @@ async function getTranscript({ video, lang, format }) {
 
   let cues;
   try {
-    cues = await YoutubeTranscript.fetchTranscript(videoId, lang ? { lang } : undefined);
+    cues = await fetchWithRetry(videoId, lang);
   } catch (e) {
-    const err = new Error(e.message || "Failed to fetch transcript.");
+    let message = e.message || "Failed to fetch transcript.";
+    if (e instanceof YoutubeTranscriptDisabledError) {
+      message =
+        `YouTube returned no captions for ${videoId} even after retrying. If this video ` +
+        `plays captions normally in a browser, YouTube is likely giving this server's IP a ` +
+        `restricted response (common for cloud-hosted deployments) rather than the captions ` +
+        `actually being disabled.`;
+    }
+    const err = new Error(message);
     err.status = 502;
     throw err;
   }
