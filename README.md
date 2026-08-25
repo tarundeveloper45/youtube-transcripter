@@ -32,6 +32,27 @@ Or from the CLI, run from inside `webapp/`:
 npx vercel
 ```
 
+#### If transcripts fail on the deployed site but work locally
+
+YouTube gives cloud/datacenter IPs (including Vercel's) a restricted
+response for some videos, even though the same request from a home
+connection works fine. This isn't fixable with request headers — the app
+retries once automatically, but if it's still failing consistently, route
+requests through a proxy with a non-datacenter exit IP:
+
+1. Get a proxy URL from a provider (e.g. [Webshare](https://www.webshare.io/)
+   has a free tier with 10 proxies) — format `http://user:pass@host:port`.
+2. In the Vercel dashboard: Project → Settings → Environment Variables, add
+   `YT_PROXY_URL` with that value.
+3. Redeploy.
+
+Locally, set the same env var before `npm start` to test it:
+
+```bash
+$env:YT_PROXY_URL = "http://user:pass@host:port"   # PowerShell
+npm start
+```
+
 ## CLI
 
 ### Setup

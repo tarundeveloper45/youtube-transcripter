@@ -2,9 +2,18 @@ const {
   YoutubeTranscript,
   YoutubeTranscriptDisabledError,
 } = require("youtube-transcript");
+const { ProxyAgent } = require("undici");
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+// Optional: route every YouTube request through a proxy (set YT_PROXY_URL,
+// e.g. http://user:pass@host:port). YouTube blocks/degrades responses for
+// known cloud-provider IP ranges (Vercel included), which no request header
+// can work around — a proxy with a non-datacenter exit IP is the actual fix.
+// Left unset, behavior is identical to a direct connection.
+const proxyUrl = process.env.YT_PROXY_URL;
+const proxyDispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : null;
 
 function extractVideoId(input) {
   const trimmed = input.trim();
@@ -65,7 +74,11 @@ function localeAwareFetch(url, options = {}) {
     headers["User-Agent"] = BROWSER_USER_AGENT;
   }
 
-  return fetch(target.toString(), { ...options, headers });
+  return fetch(target.toString(), {
+    ...options,
+    headers,
+    ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
+  });
 }
 
 async function fetchWithRetry(videoId, lang) {
